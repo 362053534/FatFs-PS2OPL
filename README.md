@@ -107,3 +107,30 @@ The FatFs module is a free software opened for education, research, and developm
 ---
 
 [Return](http://elm-chan.org/fsw_e.html)
+
+## PS2/OPL close semantics
+
+With this fork's `FF_FS_LOCK=0` configuration, `f_close()` and `f_closedir()`
+consume every non-null handle even if synchronization or validation fails.
+They clear `obj.fs` so the BDM driver's fixed handle pool can reuse the slot.
+The original error is still returned: a failed close does **not** mean pending
+writes reached the medium, and the closed handle must not be retried. Call
+`f_sync()` before closing if the application needs to retry flushing data.
+Null or already-closed handles return `FR_INVALID_OBJECT`.
+
+This error-path invalidation is disabled when `FF_FS_LOCK` is enabled; that
+configuration retains upstream share-table cleanup/retry semantics.
+
+### Host regression test
+
+Run `tests/run.sh` with a host C99 compiler (or set `CC`). The test compiles the
+real FatFs implementation with mocked disk and mutex operations and UBSan. It
+checks successful closes, write/sync failures, removed media, stale mount IDs,
+lock timeouts (including validation after sync), null/double closes, balanced
+mutex release, and 1,024 repeated failed-close/slot-reuse cycles. It does not
+replace PS2 hardware testing or exercise the BDM driver itself.
+
+To deploy, update the FatFs dependency used by PS2SDK, rebuild and install
+`bdmfs_fatfs.irx`, then rebuild OPL. Verify prolonged coverflow browsing on the
+BDM devices in use and check that handle exhaustion (`errno=24`) no longer
+accumulates after device errors. Use disposable media/data for removal tests.
