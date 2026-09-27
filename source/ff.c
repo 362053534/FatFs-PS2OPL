@@ -4228,6 +4228,8 @@ FRESULT f_close (
 	FRESULT res;
 	FATFS *fs;
 
+	if (!fp) return FR_INVALID_OBJECT;
+
 #if !FF_FS_READONLY
 	res = f_sync(fp);					/* Flush cached data */
 	if (res == FR_OK)
@@ -4246,6 +4248,12 @@ FRESULT f_close (
 #endif
 		}
 	}
+	/* PS2/OPL: the driver uses obj.fs == NULL to find free handle slots.
+	   With no share table, close must release the slot even on sync/validate
+	   errors. Preserve the error result; failed writes must not look successful. */
+#if !FF_FS_LOCK
+	fp->obj.fs = 0;
+#endif
 	return res;
 }
 
@@ -4675,6 +4683,7 @@ FRESULT f_closedir (
 	FRESULT res;
 	FATFS *fs;
 
+	if (!dp) return FR_INVALID_OBJECT;
 
 	res = validate(&dp->obj, &fs);	/* Check validity of the file object */
 	if (res == FR_OK) {
@@ -4688,6 +4697,12 @@ FRESULT f_closedir (
 		unlock_volume(fs, FR_OK);	/* Unlock volume */
 #endif
 	}
+	/* PS2/OPL: the driver uses obj.fs == NULL to find free handle slots.
+	   With no share table, close must release the slot even on sync/validate
+	   errors. Preserve the error result; failed writes must not look successful. */
+#if !FF_FS_LOCK
+	dp->obj.fs = 0;
+#endif
 	return res;
 }
 
